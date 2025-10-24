@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI画像生成ツール診断</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .theme-transition {
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out forwards;
+        }
+        .fade-out {
+            animation: fadeOut 0.5s ease-in-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+        .slide-in {
+            animation: slideIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .answer-option.selected {
+            background-color: #246db5;
+            color: #ffffff;
+            border-color: #246db5;
+        }
+        .dark .answer-option.selected {
+            background-color: #5cadff;
+            color: #1a1a1a;
+            border-color: #5cadff;
+        }
+        .loader {
+            border-top-color: #246db5;
+            animation: spin 1s linear infinite;
+        }
+        .dark .loader {
+            border-top-color: #5cadff;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .rank-badge {
+            background: linear-gradient(135deg, #246db5, #5cadff);
+        }
+        .rank-badge-1 { background: linear-gradient(135deg, #FFD700, #FFA500); }
+        .rank-badge-2 { background: linear-gradient(135deg, #C0C0C0, #A9A9A9); }
+        .rank-badge-3 { background: linear-gradient(135deg, #CD7F32, #A0522D); }
+    </style>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#246db5',
+                        secondary: '#5cadff',
+                        'text-primary': '#1a1a1a',
+                        'text-on-primary': '#ffffff',
+                        'bg-light': '#ffffff',
+                        'bg-dark': '#111827',
+                        'card-light': '#f9fafb',
+                        'card-dark': '#1f2937',
+                        'border-light': '#e5e7eb',
+                        'border-dark': '#374151',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-bg-light dark:bg-bg-dark text-text-primary dark:text-gray-200 theme-transition antialiased">
+
+    <div id="app" class="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
+        <div class="w-full max-w-2xl mx-auto relative">
+            
+            <button id="theme-toggle" class="absolute top-0 right-0 p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary theme-transition">
+                <svg id="theme-icon-light" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                <svg id="theme-icon-dark" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+            </button>
+
+            <!-- Welcome Screen -->
+            <div id="welcome-screen" class="text-center fade-in">
+                <h1 class="text-3xl sm:text-4xl font-bold text-primary dark:text-secondary mb-2">AI画像生成ツール診断</h1>
+                <p class="text-lg text-gray-600 dark:text-gray-300 mb-8">あなたにぴったりのAI画像生成ツールを見つけよう</p>
+                <button id="start-btn" class="bg-primary hover:bg-opacity-90 text-text-on-primary font-bold py-3 px-8 rounded-full text-lg shadow-lg transform hover:scale-105 transition-transform duration-300">
+                    診断を始める
+                </button>
+            </div>
+
+            <!-- Quiz Screen -->
+            <div id="quiz-screen" class="hidden">
+                <div class="mb-6">
+                    <div class="flex justify-between items-center mb-2">
+                        <span id="progress-text" class="text-sm font-medium text-primary dark:text-secondary"></span>
+                        <span id="progress-percent" class="text-sm font-medium text-gray-500 dark:text-gray-400"></span>
+                    </div>
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                        <div id="progress-bar" class="bg-primary dark:bg-secondary h-2.5 rounded-full transition-all duration-500 ease-out"></div>
+                    </div>
+                </div>
+
+                <div id="question-container" class="bg-card-light dark:bg-card-dark p-6 sm:p-8 rounded-2xl shadow-md">
+                    <h2 id="question-text" class="text-xl sm:text-2xl font-bold mb-6 text-center"></h2>
+                    <div id="answers-container" class="space-y-4"></div>
+                </div>
+
+                <div class="mt-8 flex justify-between items-center">
+                    <button id="back-btn" class="bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-text-primary dark:text-text-on-primary font-bold py-2 px-6 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed">戻る</button>
+                    <button id="next-btn" class="bg-primary hover:bg-opacity-90 text-text-on-primary font-bold py-2 px-6 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed">次へ</button>
+                </div>
+            </div>
+
+            <!-- Loading Screen -->
+            <div id="loading-screen" class="hidden text-center fade-in">
+                <div class="flex justify-center items-center mb-4">
+                    <div class="loader w-12 h-12 rounded-full border-4 border-gray-200 dark:border-gray-700"></div>
+                </div>
+                <h2 class="text-2xl font-bold text-primary dark:text-secondary">分析中...</h2>
+                <p class="text-gray-600 dark:text-gray-300">あなたに最適なおすすめを計算しています</p>
+            </div>
+
+            <!-- Results Screen -->
+            <div id="results-screen" class="hidden">
+                <div class="text-center mb-8">
+                    <h1 class="text-3xl sm:text-4xl font-bold text-primary dark:text-secondary mb-2">診断結果</h1>
+                    <p class="text-lg text-gray-600 dark:text-gray-300">あなたへのおすすめAI画像生成ツール</p>
+                </div>
+                <div id="results-container" class="space-y-6"></div>
+                <div class="mt-8 text-center space-y-4 sm:space-y-0 sm:flex sm:justify-center sm:space-x-4">
+                    <button id="share-btn" class="w-full sm:w-auto bg-secondary hover:bg-opacity-90 text-text-primary font-bold py-3 px-8 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-300">
+                        結果を共有する
+                    </button>
+                    <button id="restart-btn" class="w-full sm:w-auto bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-text-primary dark:text-text-on-primary font-bold py-3 px-8 rounded-full transition-colors">
+                        もう一度診断する
+                    </button>
+                </div>
+                <div id="share-feedback" class="mt-4 text-center text-green-600 dark:text-green-400 font-medium h-6"></div>
+            </div>
+        </div>
+    </div>
+
+<script>
+const appData = {
+    questions: [
+        {
+            question: "AI画像を生成する主な目的は何ですか？",
+            answers: [
+                { text: "個人の趣味や探求、創造的な学習のため", value: "A" },
+                { text: "プロのクリエイティブ制作（コンセプトアート、イラストなど）", value: "B" },
+                { text: "マーケティング素材や商用利用、コンテンツ作成", value: "C" },
+                { text: "プロトタイプやデザインモックアップ、迅速な試作", value: "D" }
+            ]
+        },
+        {
+            question: "どのレベルの画質やスタイル制御を重視しますか？",
+            answers: [
+                { text: "使いやすく、初期設定でも見栄えが良い。美的センスは高いが細かい制御は不要", value: "A" },
+                { text: "高い芸術性、ユニークで独特なスタイル。特定の美的感覚を学ぶ意欲がある", value: "B" },
+                { text: "写真のようなリアルさ、正確な構図。様々な要素を細かく制御したい", value: "C" },
+                { text: "リアルから抽象まで多様なスタイルに対応でき、素早く実験したい", value: "D" }
+            ]
+        },
+        {
+            question: "技術的なパラメータ調整やプロンプト作成にどのくらい慣れていますか？",
+            answers: [
+                { text: "初心者 - シンプルな操作を好み、技術的な入力は最小限にしたい", value: "A" },
+                { text: "中級者 - より良い結果のためなら、ある程度のパラメータを学ぶ意欲がある", value: "B" },
+                { text: "上級者 - パラメータの深掘りや複雑なプロンプト、外部ツールを駆使したい", value: "C" },
+                { text: "手間をかけずに素早く生成したいが、基本的なオプションは欲しい", value: "D" }
+            ]
+        },
+        {
+            question: "AI画像生成ツールに期待する予算はどのくらいですか？",
+            answers: [
+                { text: "無料または非常に低コストであることが重要。オープンソースや無料枠が豊富なものが良い", value: "A" },
+                { text: "品質の高いツールを安定して使うためなら、妥当な月額料金を支払う", value: "B" },
+                { text: "高度な機能や多くの生成回数のためなら、柔軟に支払う", value: "C" },
+                { text: "月額課金よりも、生成ごとやクレジットベースの支払いを好む", value: "D" }
+            ]
+        },
+        {
+            question: "インペインティング、アウトペインティング、ControlNetなどの高度な機能は必要ですか？",
+            answers: [
+                { text: "不要。主にテキストから画像を生成できれば良い", value: "A" },
+                { text: "あれば嬉しいが、必須ではない。編集は外部ツールでも可能", value: "B" },
+                { text: "はい、作業フローにおいて高度な編集や微調整、精密な制御が重要", value: "C" },
+                { text: "背景削除やキャンバス拡張など基本的な生成編集は必要", value: "D" }
+            ]
+        },
+        {
+            question: "主にどのようなコンテンツを生成する予定ですか？",
+            answers: [
+                { text: "抽象的、想像力豊か、芸術的なコンセプト", value: "A" },
+                { text: "現実的な風景、製品モックアップ、建築ビジュアライゼーション", value: "B" },
+                { text: "キャラクターデザイン、イラスト、ファンタジーアート", value: "C" },
+                { text: "マーケティング用のビジュアル、SNSコンテンツ、汎用的な画像", value: "D" }
+            ]
+        }
+    ],
+    aiTools: {
+        midjourney: {
+            name: "Midjourney",
+            url: "https://www.midjourney.com/",
+            targetUsers: "芸術家、デザイナー、ユニークで美的センスの高いビジュアルを求める趣味ユーザー、コンセプトアーティストなど、精密な制御よりも芸術的な品質と使いやすさを重視する人。",
+            strengths: [
+                "非常に美的で独特なアートスタイル",
+                "抽象的、想像力豊かなコンセプトに強い",
+                "簡単なプロンプトで高品質な結果が得られる",
+                "活発なコミュニティと継続的な開発"
+            ],
+            caveats: [
+                "細部の精密な制御は他ツールに劣る",
+                "スタイルに癖があり、特定の技術的表現は難しい",
+                "実質的に有料（無料枠は限定的）",
+                "DiscordベースのUIに慣れが必要"
+            ],
+            cost: "月額$10程度のベーシックプランから。上位プランでは生成回数や速度が向上し、商用利用も可能。"
+        },
+        stable_diffusion: {
+            name: "Stable Diffusion",
+            url: "https://stability.ai/",
+            targetUsers: "開発者、高度な制御を求めるアーティスト、研究者。特定のハードウェアを持つか、オープンソースを好むユーザー。ニッチなコンテンツ生成に興味がある人。",
+            strengths: [
+                "オープンソースでカスタマイズ性が非常に高い（ControlNet, LoRAなど）",
+                "ローカル環境で実行可能、プライバシーとコスト効率が良い",
+                "写真のようなリアルな表現からアニメ調まで幅広いスタイルに対応",
+                "豊富なツールと巨大なコミュニティ"
+            ],
+            caveats: [
+                "学習コストが高い",
+                "最適な結果を得るには技術的な知識が必要",
+                "性能はハードウェアに大きく依存する",
+                "高品質な出力を安定させるには工夫が必要"
+            ],
+            cost: "自己ホスティングなら無料（ハードウェア費用は別途）。クラウドサービスはクレジット制または月額制（例：$10〜$50）。"
+        },
+        dalle: {
+            name: "DALL·E",
+            url: "https://openai.com/dall-e-3",
+            targetUsers: "マーケティング担当者、コンテンツ制作者。テキストから素早く正確なビジュアルを求める人。使いやすさとプロンプトの正確さを重視するユーザー。",
+            strengths: [
+                "自然言語の理解力に優れ、多様なコンテンツを生成",
+                "論理的で整った構図も得意",
+                "安定したパフォーマンスと一貫した結果",
+                "ChatGPTとの連携で対話的に画像を生成・修正できる"
+            ],
+            caveats: [
+                "Midjourneyほどの独特な芸術性はない",
+                "Stable Diffusionほどの高度な画像操作機能はない",
+                "大量生成にはコストがかかる",
+                "コンテンツポリシーが比較的厳しい"
+            ],
+            cost: "クレジット制（例：$15で115クレジット）。ChatGPT Plusのサブスクリプションに含まれる場合もある。"
+        },
+        firefly: {
+            name: "Adobe Firefly",
+            url: "https://www.adobe.com/sensei/generative-ai/firefly.html",
+            targetUsers: "グラフィックデザイナー、マーケティング担当者、イラストレーター。Adobe製品を利用する企業や個人。商用利用の安全性を重視するユーザー。",
+            strengths: [
+                "Adobe Creative Cloudとのシームレスな連携",
+                "商用利用に安全なコンテンツ生成（Adobe Stockで学習）",
+                "アプリ内での編集機能（生成塗りつぶしなど）が強力",
+                "ベクターグラフィックの生成も可能"
+            ],
+            caveats: [
+                "主に商業・デザイン用途向けで、芸術的な自由度は低い",
+                "Adobeエコシステム内での利用が最適",
+                "実験的・抽象的なコンテンツには不向き",
+                "クレジット消費の管理が必要"
+            ],
+            cost: "主にAdobe Creative Cloudのサブスクリプションに含まれる。クレジットに特化した単体プランもあり。"
+        }
+    },
+    scoringMatrix: [
+        { A: { midjourney: 5, stable_diffusion: 4, dalle: 3, firefly: 2 }, B: { midjourney: 4, stable_diffusion: 5, dalle: 3, firefly: 4 }, C: { midjourney: 2, stable_diffusion: 4, dalle: 4, firefly: 5 }, D: { midjourney: 3, stable_diffusion: 4, dalle: 4, firefly: 5 } },
+        { A: { midjourney: 5, stable_diffusion: 2, dalle: 4, firefly: 3 }, B: { midjourney: 5, stable_diffusion: 4, dalle: 3, firefly: 2 }, C: { midjourney: 2, stable_diffusion: 5, dalle: 3, firefly: 4 }, D: { midjourney: 3, stable_diffusion: 4, dalle: 4, firefly: 4 } },
+        { A: { midjourney: 5, stable_diffusion: 1, dalle: 4, firefly: 3 }, B: { midjourney: 4, stable_diffusion: 4, dalle: 3, firefly: 4 }, C: { midjourney: 2, stable_diffusion: 5, dalle: 2, firefly: 3 }, D: { midjourney: 4, stable_diffusion: 3, dalle: 5, firefly: 4 } },
+        { A: { midjourney: 1, stable_diffusion: 5, dalle: 2, firefly: 2 }, B: { midjourney: 4, stable_diffusion: 3, dalle: 3, firefly: 4 }, C: { midjourney: 3, stable_diffusion: 4, dalle: 4, firefly: 4 }, D: { midjourney: 2, stable_diffusion: 3, dalle: 5, firefly: 3 } },
+        { A: { midjourney: 4, stable_diffusion: 2, dalle: 3, firefly: 3 }, B: { midjourney: 3, stable_diffusion: 4, dalle: 3, firefly: 4 }, C: { midjourney: 1, stable_diffusion: 5, dalle: 2, firefly: 5 }, D: { midjourney: 4, stable_diffusion: 3, dalle: 4, firefly: 4 } },
+        { A: { midjourney: 5, stable_diffusion: 4, dalle: 4, firefly: 2 }, B: { midjourney: 2, stable_diffusion: 5, dalle: 3, firefly: 5 }, C: { midjourney: 4, stable_diffusion: 5, dalle: 3, firefly: 4 }, D: { midjourney: 3, stable_diffusion: 4, dalle: 5, firefly: 5 } }
+    ]
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const state = {
+        currentQuestion: 0,
+        userAnswers: new Array(appData.questions.length).fill(null),
+    };
+
+    const elements = {
+        welcomeScreen: document.getElementById('welcome-screen'),
+        quizScreen: document.getElementById('quiz-screen'),
+        loadingScreen: document.getElementById('loading-screen'),
+        resultsScreen: document.getElementById('results-screen'),
+        startBtn: document.getElementById('start-btn'),
+        backBtn: document.getElementById('back-btn'),
+        nextBtn: document.getElementById('next-btn'),
+        restartBtn: document.getElementById('restart-btn'),
+        shareBtn: document.getElementById('share-btn'),
+        shareFeedback: document.getElementById('share-feedback'),
+        progressText: document.getElementById('progress-text'),
+        progressPercent: document.getElementById('progress-percent'),
+        progressBar: document.getElementById('progress-bar'),
+        questionText: document.getElementById('question-text'),
+        answersContainer: document.getElementById('answers-container'),
+        resultsContainer: document.getElementById('results-container'),
+        themeToggle: document.getElementById('theme-toggle'),
+        themeIconLight: document.getElementById('theme-icon-light'),
+        themeIconDark: document.getElementById('theme-icon-dark'),
+    };
+
+    function initTheme() {
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+            elements.themeIconLight.classList.remove('hidden');
+            elements.themeIconDark.classList.add('hidden');
+        } else {
+            document.documentElement.classList.remove('dark');
+            elements.themeIconLight.classList.add('hidden');
+            elements.themeIconDark.classList.remove('hidden');
+        }
+    }
+
+    function toggleTheme() {
+        const isDark = document.documentElement.classList.toggle('dark');
+        localStorage.theme = isDark ? 'dark' : 'light';
+        elements.themeIconLight.classList.toggle('hidden', !isDark);
+        elements.themeIconDark.classList.toggle('hidden', isDark);
+    }
+
+    function renderQuestion(index) {
+        const questionData = appData.questions[index];
+        elements.questionText.textContent = questionData.question;
+        elements.answersContainer.innerHTML = '';
+
+        questionData.answers.forEach(answer => {
+            const button = document.createElement('button');
+            button.className = 'w-full text-left p-4 border border-border-light dark:border-border-dark rounded-lg hover:border-primary dark:hover:border-secondary theme-transition answer-option';
+            button.textContent = answer.text;
+            button.dataset.value = answer.value;
+            if (state.userAnswers[index] === answer.value) {
+                button.classList.add('selected');
+            }
+            button.addEventListener('click', () => handleAnswerSelect(answer.value));
+            elements.answersContainer.appendChild(button);
+        });
+
+        updateProgress();
+        updateNavButtons();
+    }
+
+    function handleAnswerSelect(value) {
+        state.userAnswers[state.currentQuestion] = value;
+        document.querySelectorAll('.answer-option').forEach(btn => {
+            btn.classList.toggle('selected', btn.dataset.value === value);
+        });
+        elements.nextBtn.disabled = false;
+    }
+
+    function updateProgress() {
+        const totalQuestions = appData.questions.length;
+        const percent = ((state.currentQuestion + 1) / totalQuestions) * 100;
+        elements.progressBar.style.width = `${percent}%`;
+        elements.progressText.textContent = `質問 ${state.currentQuestion + 1} / ${totalQuestions}`;
+        elements.progressPercent.textContent = `${Math.round(percent)}%`;
+    }
+
+    function updateNavButtons() {
+        elements.backBtn.disabled = state.currentQuestion === 0;
+        elements.nextBtn.disabled = state.userAnswers[state.currentQuestion] === null;
+        elements.nextBtn.textContent = state.currentQuestion === appData.questions.length - 1 ? '結果を見る' : '次へ';
+    }
+
+    function handleNext() {
+        if (state.currentQuestion < appData.questions.length - 1) {
+            state.currentQuestion++;
+            renderQuestion(state.currentQuestion);
+        } else {
+            showLoadingAndResults();
+        }
+    }
+
+    function handleBack() {
+        if (state.currentQuestion > 0) {
+            state.currentQuestion--;
+            renderQuestion(state.currentQuestion);
+        }
+    }
+
+    function showScreen(screenElement) {
+        [elements.welcomeScreen, elements.quizScreen, elements.loadingScreen, elements.resultsScreen].forEach(el => {
+            el.classList.add('hidden');
+        });
+        screenElement.classList.remove('hidden');
+        screenElement.classList.remove('fade-out');
+        screenElement.classList.add('fade-in');
+    }
+
+    function showLoadingAndResults() {
+        showScreen(elements.loadingScreen);
+        setTimeout(() => {
+            const results = calculateResults();
+            renderResults(results);
+            showScreen(elements.resultsScreen);
+        }, 1500);
+    }
+
+    function calculateResults() {
+        const scores = Object.keys(appData.aiTools).reduce((acc, tool) => {
+            acc[tool] = 0;
+            return acc;
+        }, {});
+
+        state.userAnswers.forEach((answer, index) => {
+            if (answer) {
+                const questionScores = appData.scoringMatrix[index][answer];
+                for (const tool in questionScores) {
+                    scores[tool] += questionScores[tool];
+                }
+            }
+        });
+
+        return Object.entries(scores)
+            .map(([id, score]) => ({ id, score, ...appData.aiTools[id] }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 3);
+    }
+
+    function renderResults(results) {
+        elements.resultsContainer.innerHTML = '';
+        const rankBadges = ['rank-badge-1', 'rank-badge-2', 'rank-badge-3'];
+        const rankTexts = ['1位のおすすめ', '2位のおすすめ', '3位のおすすめ'];
+
+        results.forEach((tool, index) => {
+            const card = document.createElement('div');
+            card.className = 'bg-card-light dark:bg-card-dark p-6 rounded-2xl shadow-md border border-border-light dark:border-border-dark slide-in';
+            card.style.animationDelay = `${index * 150}ms`;
+            
+            const listToHtml = (items) => items.map(item => `<li class="flex items-start"><span class="text-secondary mr-2 mt-1">✓</span><span>${item}</span></li>`).join('');
+
+            card.innerHTML = `
+                <div class="flex items-center mb-4">
+                    <span class="text-white font-bold py-1 px-3 rounded-full mr-3 ${rankBadges[index]}">${rankTexts[index]}</span>
+                    <h2 class="text-2xl font-bold text-primary dark:text-secondary">${tool.name}</h2>
+                </div>
+                <div class="space-y-4 text-gray-700 dark:text-gray-300">
+                    <div>
+                        <h3 class="font-bold text-lg mb-1 text-text-primary dark:text-gray-100">こんな人におすすめ</h3>
+                        <p>${tool.targetUsers}</p>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg mb-1 text-text-primary dark:text-gray-100">長所</h3>
+                        <ul class="space-y-1">${listToHtml(tool.strengths)}</ul>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg mb-1 text-text-primary dark:text-gray-100">注意点</h3>
+                        <ul class="space-y-1">${listToHtml(tool.caveats)}</ul>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg mb-1 text-text-primary dark:text-gray-100">推定コスト</h3>
+                        <p>${tool.cost}</p>
+                    </div>
+                    <div class="pt-2">
+                        <a href="${tool.url}" target="_blank" rel="noopener noreferrer" class="inline-block bg-primary hover:bg-opacity-90 text-text-on-primary font-bold py-2 px-5 rounded-full transition-colors">公式サイトへ</a>
+                    </div>
+                </div>
+            `;
+            elements.resultsContainer.appendChild(card);
+        });
+    }
+
+    function handleShare() {
+        const params = new URLSearchParams();
+        state.userAnswers.forEach((answer, index) => {
+            if (answer) {
+                params.set(`q${index + 1}`, answer);
+            }
+        });
+        const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+        
+        navigator.clipboard.writeText(shareUrl).then(() => {
+            elements.shareFeedback.textContent = 'リンクをコピーしました！';
+            setTimeout(() => {
+                elements.shareFeedback.textContent = '';
+            }, 3000);
+        }).catch(err => {
+            console.error('Could not copy text: ', err);
+            elements.shareFeedback.textContent = 'コピーに失敗しました';
+        });
+    }
+
+    function resetApp() {
+        state.currentQuestion = 0;
+        state.userAnswers.fill(null);
+        showScreen(elements.welcomeScreen);
+    }
+
+    function checkUrlParams() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('q1')) {
+            let validParams = true;
+            appData.questions.forEach((_, index) => {
+                const answer = params.get(`q${index + 1}`);
+                if (answer && ['A', 'B', 'C', 'D'].includes(answer)) {
+                    state.userAnswers[index] = answer;
+                } else {
+                    validParams = false;
+                }
+            });
+            if (validParams && !state.userAnswers.includes(null)) {
+                showLoadingAndResults();
+            } else {
+                showScreen(elements.welcomeScreen);
+            }
+        } else {
+            showScreen(elements.welcomeScreen);
+        }
+    }
+
+    elements.startBtn.addEventListener('click', () => {
+        showScreen(elements.quizScreen);
+        renderQuestion(state.currentQuestion);
+    });
+    elements.nextBtn.addEventListener('click', handleNext);
+    elements.backBtn.addEventListener('click', handleBack);
+    elements.restartBtn.addEventListener('click', resetApp);
+    elements.shareBtn.addEventListener('click', handleShare);
+    elements.themeToggle.addEventListener('click', toggleTheme);
+
+    initTheme();
+    checkUrlParams();
+});
+</script>
+</body>
+</html>
